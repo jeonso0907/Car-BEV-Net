@@ -7,11 +7,13 @@ import pickle
 pcd_path = "path_to_kitti/velodyne"
 label_path = "path_to_kitti/label_2"
 
+
 # Function to load PCD file
 def load_pcd(file_path):
     pc = pypcd.PointCloud.from_path(file_path)
     points = np.vstack((pc.pc_data['x'], pc.pc_data['y'], pc.pc_data['z'])).T
     return points
+
 
 # Function to load labels
 def load_labels(file_path):
@@ -19,13 +21,16 @@ def load_labels(file_path):
         labels = f.readlines()
     return labels
 
+
+# Extract car points from point cloud
 def extract_car_points(points, labels):
     car_points = []
     car_angles = []
     for label in labels:
         parts = label.split()
         if parts[0] == 'Car':
-            x, y, z, l, w, h, ry = float(parts[11]), float(parts[12]), float(parts[13]), float(parts[8]), float(parts[9]), float(parts[10]), float(parts[14])
+            x, y, z, l, w, h, ry = float(parts[11]), float(parts[12]), float(parts[13]), float(parts[8]), float(
+                parts[9]), float(parts[10]), float(parts[14])
             mask = ((points[:, 0] > x - l / 2) & (points[:, 0] < x + l / 2) &
                     (points[:, 1] > y - w / 2) & (points[:, 1] < y + w / 2) &
                     (points[:, 2] > z - h / 2) & (points[:, 2] < z + h / 2))
@@ -33,6 +38,8 @@ def extract_car_points(points, labels):
             car_angles.append(ry)
     return car_points, car_angles
 
+
+# Convert point cloud to BEV image
 def point_cloud_to_bev(points, res=0.1, z_max=2.5, z_min=-2.5):
     bev_image = np.zeros((int(80 / res), int(80 / res)), dtype=np.float32)
     points = points[(points[:, 2] > z_min) & (points[:, 2] < z_max)]
@@ -45,6 +52,7 @@ def point_cloud_to_bev(points, res=0.1, z_max=2.5, z_min=-2.5):
     return bev_image
 
 
+# Save BEV images and angles
 def save_bev_images(car_points, car_angles, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -55,8 +63,8 @@ def save_bev_images(car_points, car_angles, output_dir):
             pickle.dump(data, f)
 
 
-# Example usage
-output_dir = "car_bev_data"
+# Main extraction process
+output_dir = "car_clusters"
 for file in os.listdir(pcd_path):
     pcd_file = os.path.join(pcd_path, file)
     label_file = os.path.join(label_path, file.replace('.bin', '.txt'))
