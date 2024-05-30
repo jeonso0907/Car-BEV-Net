@@ -1,26 +1,25 @@
 import os
 import numpy as np
-from pypcd import pypcd
+import open3d as o3d
 import pickle
+from tqdm import tqdm  # Import tqdm for the progress bar
 
 # Paths to KITTI dataset
-pcd_path = "path_to_kitti/velodyne"
-label_path = "path_to_kitti/label_2"
+pcd_path = "D:/data/kitti/training/velodyne"
+label_path = "D:/data/kitti/training/label_2"
 
-
-# Function to load PCD file
+# Function to load PCD or BIN file
 def load_pcd(file_path):
-    pc = pypcd.PointCloud.from_path(file_path)
-    points = np.vstack((pc.pc_data['x'], pc.pc_data['y'], pc.pc_data['z'])).T
-    return points
-
+    # KITTI data is usually stored in .bin format for LiDAR
+    pcd = np.fromfile(file_path, dtype=np.float32).reshape(-1, 4)
+    pcd = pcd[:, :3]  # discard the reflectance value, only x, y, z needed
+    return pcd
 
 # Function to load labels
 def load_labels(file_path):
     with open(file_path, 'r') as f:
         labels = f.readlines()
     return labels
-
 
 # Extract car points from point cloud
 def extract_car_points(points, labels):
@@ -38,7 +37,6 @@ def extract_car_points(points, labels):
             car_angles.append(ry)
     return car_points, car_angles
 
-
 # Convert point cloud to BEV image
 def point_cloud_to_bev(points, res=0.1, z_max=2.5, z_min=-2.5):
     bev_image = np.zeros((int(80 / res), int(80 / res)), dtype=np.float32)
@@ -51,7 +49,6 @@ def point_cloud_to_bev(points, res=0.1, z_max=2.5, z_min=-2.5):
     bev_image = (bev_image - z_min) / (z_max - z_min)
     return bev_image
 
-
 # Save BEV images and angles
 def save_bev_images(car_points, car_angles, output_dir):
     if not os.path.exists(output_dir):
@@ -62,10 +59,10 @@ def save_bev_images(car_points, car_angles, output_dir):
         with open(os.path.join(output_dir, f'car_{i}.pkl'), 'wb') as f:
             pickle.dump(data, f)
 
-
 # Main extraction process
-output_dir = "car_clusters"
-for file in os.listdir(pcd_path):
+output_dir = "D:/projects/Car-BEV-Net/data/car_clusters"
+files = os.listdir(pcd_path)
+for file in tqdm(files, desc="Processing files"):  # Use tqdm here to show progress
     pcd_file = os.path.join(pcd_path, file)
     label_file = os.path.join(label_path, file.replace('.bin', '.txt'))
 
