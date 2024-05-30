@@ -5,8 +5,8 @@ import pickle
 from tqdm import tqdm  # Import tqdm for the progress bar
 
 # Paths to KITTI dataset
-pcd_path = "D:/data/kitti/training/velodyne"
-label_path = "D:/data/kitti/training/label_2"
+pcd_path = "D:/projects/Car-BEV-Net/data/kitti_sample/velodyne"
+label_path = "D:/projects/Car-BEV-Net/data/kitti_sample/label_2"
 
 # Function to load PCD or BIN file
 def load_pcd(file_path):
@@ -50,13 +50,14 @@ def point_cloud_to_bev(points, res=0.1, z_max=2.5, z_min=-2.5):
     return bev_image
 
 # Save BEV images and angles
-def save_bev_images(car_points, car_angles, output_dir):
+def save_bev_images(car_points, car_angles, base_filename, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     for i, (points, angle) in enumerate(zip(car_points, car_angles)):
         bev_image = point_cloud_to_bev(points)
         data = {'bev_image': bev_image, 'angle': angle}
-        with open(os.path.join(output_dir, f'car_{i}.pkl'), 'wb') as f:
+        output_file = os.path.join(output_dir, f'{base_filename}_car_{i}.pkl')
+        with open(output_file, 'wb') as f:
             pickle.dump(data, f)
 
 # Main extraction process
@@ -65,9 +66,10 @@ files = os.listdir(pcd_path)
 for file in tqdm(files, desc="Processing files"):  # Use tqdm here to show progress
     pcd_file = os.path.join(pcd_path, file)
     label_file = os.path.join(label_path, file.replace('.bin', '.txt'))
+    base_filename = os.path.splitext(file)[0]  # Extract the base name without the extension
 
     points = load_pcd(pcd_file)
     labels = load_labels(label_file)
 
     car_points, car_angles = extract_car_points(points, labels)
-    save_bev_images(car_points, car_angles, output_dir)
+    save_bev_images(car_points, car_angles, base_filename, output_dir)

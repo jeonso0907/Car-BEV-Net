@@ -15,14 +15,25 @@ class BEVNet(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        self.fc1 = nn.Linear(128 * 40 * 40, 512)  # Adjust according to input size
+
+        # Calculate the size after the convolutional and pooling layers
+        self._to_linear = None
+        self.convs(torch.randn(1, 1, 800, 800))  # Initialize to calculate the size
+
+        self.fc1 = nn.Linear(self._to_linear, 512)
         self.fc2 = nn.Linear(512, 1)
 
-    def forward(self, x):
+    def convs(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
-        x = x.view(-1, 128 * 40 * 40)  # Flatten the tensor
+        if self._to_linear is None:
+            self._to_linear = x.view(x.size(0), -1).shape[1]
+        return x
+
+    def forward(self, x):
+        x = self.convs(x)
+        x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -43,23 +54,43 @@ class CarDataset(Dataset):
         angle = data['angle']
         return torch.tensor(bev_image, dtype=torch.float32), torch.tensor(angle, dtype=torch.float32)
 
+# Check for CPU
+device = torch.device("cpu")
+print(f"Using device: {device}")
+
 # Setup dataset and dataloader
-dataset = CarDataset('car_bev_data')
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+dataset = CarDataset('D:/projects/Car-BEV-Net/data/car_clusters')
+dataloader = DataLoader(dataset, batch_size=16, shuffle=True)  # Batch size set to 16
 
 # Initialize model, optimizer, and loss function
-model = BEVNet()
+model = BEVNet().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 loss_function = nn.MSELoss()
 
 # Training loop
-num_epochs = 10
+num_epochs = 50
+best_loss = float('inf')  # Initialize best loss to infinity
 for epoch in range(num_epochs):
-    for bev_images, angles in dataloader:
+    running_loss = 0.0
+    for i, (bev_images, angles) in enumerate(dataloader):
+        bev_images, angles = bev_images.to(device), angles.to(device)  # Move data to CPU
+
         optimizer.zero_grad()
         outputs = model(bev_images)
         loss = loss_function(outputs.squeeze(), angles)
         loss.backward()
         optimizer.step()
 
-    print(f'Epoch {epoch+1}, Loss: {loss.item()}')
+        running_loss += loss.item()
+        print(f'Epoch {epoch + 1}, Batch {i + 1}, Loss: {running_loss / (i + 1):.4f}')  # Update with running loss
+
+    avg_loss = running_loss / len(dataloader)
+    print(f'Epoch {epoch + 1}/{num_epochs}, Average Loss: {avg_loss:.4f}')
+
+    # Save the model if it has the best loss so far
+    if avg_loss < best_loss:
+        best_loss = avg_loss
+        torch.save(model.state_dict(), 'D:/projects/Car-BEV-Net/model/best_model.pth')
+        print(f"Saved best model with loss {best_loss:.4f}")
+
+print("Training complete")
